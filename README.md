@@ -3,6 +3,32 @@ Simple WIP Mixin Framework for C# using Mono.Cecil
 
 ## Usage
 
+### PreSharpin
+
+When working with third-party assemblies, access levels aren't always how you'd want them to be. Sometimes it's necessary to make certain things public or non-final (readonly / sealed).
+
+The `PreSharpin` class can be used to apply access transformers to a target assembly, which you can then add as a Reference to your Mixin project instead of the original assembly.
+
+```csharp
+PreSharpin.ApplyAccessTransformer("CleanTest.exe", "CleanTest-presharp.exe", @"
+    # this is a comment
+    public-f CleanTest.PrivateTest
+
+    public System.Boolean CleanTest.PrivateTest::IsThisGud()
+    public System.Boolean CleanTest.PrivateTest::IsThisGud(System.String)
+
+    public System.String CleanTest.PrivateTest::noseepls # I can see!
+
+    public-f System.Int32 CleanTest.PrivateTest::notouchpls
+    ");
+```
+
+Modifiers can be applied to classes, methods and fields.
+
+- `public` will simply make the target public
+- `-f` will strip readonly for fields and sealed for classes
+- `-ns` will add a [NonSerialized] attribute to the field (this is **necessary** when making fields public that are serialized, like in Unity's MonoBehaviour; otherwise Unity will not be able to load scenes with this behaviour)
+
 ### Inject
 
 ```csharp
