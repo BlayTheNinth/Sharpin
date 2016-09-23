@@ -59,14 +59,17 @@ These are the locals (with name, pretend it's a Debug build):
 ```
 
 Sadly locals lose their names on Release builds, so we have to access them by index.
+
 The following will grab the `modifiedDamage` right before it's applied via `SomeCharacter::ReduceHealth`
 
+```csharp
 [Inject(method = "System.Void SomeCharacter::OnDamage(System.Int32)", at = "IL_0017: call System.Void SomeCharacter::ReduceHealth(System.Int32)")]
 public void OnDamage(int baseDamage, [CaptureLocal(1, typeof(int))] int modifiedDamage, [StoreLocal(1, typeof(int))] out int outModifiedDamage) {
     if(modifiedDamage == 1336) { // Ugh, so close. Let's just sneakily add one to make it happen.
         outModifiedDamage = modifiedDamage + 1;
     }
 }
+```
 
 ### Injection Points
 
