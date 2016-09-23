@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Linq;
 
 using Mono.Cecil;
 
@@ -12,6 +8,7 @@ namespace Sharpin2 {
         public string Method { get; }
         public string At { get; }
         public bool Cancellable { get; }
+        public string CancelTarget { get; }
         public int ExpectedInjections { get; }
 
         public InjectInfo(MethodDefinition newMethod) {
@@ -20,6 +17,7 @@ namespace Sharpin2 {
             this.Method = AttrHelper.GetAttribute<string>(attr, "method");
             this.At = AttrHelper.GetAttribute<string>(attr, "at");
             this.Cancellable = AttrHelper.GetAttribute<bool>(attr, "cancellable");
+            this.CancelTarget = AttrHelper.GetAttribute<string>(attr, "cancelTarget", "ret");
             this.ExpectedInjections = AttrHelper.GetAttribute<int>(attr, "expectedInjections", 1);
         }
     }

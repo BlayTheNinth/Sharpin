@@ -6,6 +6,7 @@ namespace Sharpin2 {
         public string method;
         public string at;
         public bool cancellable;
+        public string cancelTarget;
         public int expectedInjections;
     }
 }

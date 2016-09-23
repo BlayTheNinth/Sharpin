@@ -78,8 +78,6 @@ namespace Sharpin2 {
             } else {
                 ApplyInjectSimple(mixin, targetType, targetMethod, inject);
             }
-
-            // TODO make sure to update other jumps to properly do the shift when inserting 
         }
 
         private void ApplyInjectCancellable(MixinInfo mixin, TypeDefinition targetType, MethodDefinition targetMethod, InjectInfo inject) {
@@ -189,14 +187,31 @@ namespace Sharpin2 {
             } else {
                 insnList.Add(il.Create(OpCodes.Callvirt, targetModule.ImportReference(callbackInfoTypeDef.Methods.Single(m => m.Name == "get_IsCancelled"))));
             }
-            Instruction nopAfterReturn = il.Create(OpCodes.Nop);
-            insnList.Add(il.Create(OpCodes.Brfalse, nopAfterReturn));
-            if (targetMethod.ReturnType != targetModule.TypeSystem.Void) {
-                insnList.Add(il.CreateLdloc(callbackInfo, callbackInfoIndex));
-                insnList.Add(il.Create(OpCodes.Callvirt, targetModule.ImportReference(callbackInfoTypeDef.Methods.Single(m => m.Name == "get_ReturnValue").MakeHostInstanceGeneric(targetMethod.ReturnType))));
+            if (inject.CancelTarget == "ret") {
+                Instruction nopAfterReturn = il.Create(OpCodes.Nop);
+                insnList.Add(il.Create(OpCodes.Brfalse, nopAfterReturn));
+                if (targetMethod.ReturnType != targetModule.TypeSystem.Void) {
+                    insnList.Add(il.CreateLdloc(callbackInfo, callbackInfoIndex));
+                    insnList.Add(il.Create(OpCodes.Callvirt, targetModule.ImportReference(callbackInfoTypeDef.Methods.Single(m => m.Name == "get_ReturnValue").MakeHostInstanceGeneric(targetMethod.ReturnType))));
+                }
+                insnList.Add(il.Create(OpCodes.Ret));
+                insnList.Add(nopAfterReturn);
+            } else {
+                Instruction found = null;
+                foreach (Instruction inst in targetMethod.Body.Instructions) {
+                    var instString = inst.ToString();
+                    if (inject.CancelTarget == instString) {
+                        found = inst;
+                        while (found.Previous != null && IsLdOpCode(found.Previous.OpCode)) {
+                            found = found.Previous;
+                        }
+                    }
+                }
+                if (found == null) {
+                    throw new MixinException("Could not find cancel target '" + inject.CancelTarget + "' in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
+                }
+                insnList.Add(il.Create(OpCodes.Brtrue, found));
             }
-            insnList.Add(il.Create(OpCodes.Ret));
-            insnList.Add(nopAfterReturn);
 
             // Time to apply the patch
             List<Instruction> atList = FindInjectionPoint(inject, targetMethod);
@@ -232,15 +247,15 @@ namespace Sharpin2 {
             var storedLocals = new List<VariableDefinition>();
             foreach (var parameter in inject.NewMethod.Parameters) {
                 callbackMethod.Parameters.Add(parameter.ToModule(targetModule));
-                if(AttrHelper.HasAttribute(parameter, typeof(CaptureLocal))) { 
+                if (AttrHelper.HasAttribute(parameter, typeof(CaptureLocal))) {
                     var captureInfo = new CaptureLocalInfo(parameter);
                     var local = targetMethod.Body.Variables[captureInfo.Index];
-                    if(local.VariableType.FullName != captureInfo.Type.FullName) {
+                    if (local.VariableType.FullName != captureInfo.Type.FullName) {
                         throw new MixinException("Failed to capture local, type mismatch " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
                     }
                     capturedLocals.Add(local);
                     parameter.CustomAttributes.Remove(parameter.GetAttribute(typeof(CaptureLocal)));
-                } else if(AttrHelper.HasAttribute(parameter, typeof(StoreLocal))) {
+                } else if (AttrHelper.HasAttribute(parameter, typeof(StoreLocal))) {
                     var storeInfo = new StoreLocalInfo(parameter);
                     var local = targetMethod.Body.Variables[storeInfo.Index];
                     if (local.VariableType.FullName != storeInfo.Type.FullName) {
@@ -250,7 +265,7 @@ namespace Sharpin2 {
                     parameter.CustomAttributes.Remove(parameter.GetAttribute(typeof(StoreLocal)));
                 }
             }
-            
+
 
             var il = callbackMethod.Body.GetILProcessor();
             foreach (var inst in inject.NewMethod.Body.Instructions) {
@@ -267,7 +282,7 @@ namespace Sharpin2 {
             for (int i = 0; i < targetMethod.Parameters.Count; i++) {
                 insnList.Add(il.CreateLdarg(i + 1));
             }
-            foreach(var local in capturedLocals) {
+            foreach (var local in capturedLocals) {
                 insnList.Add(il.CreateLdloc(local, local.Index));
             }
             foreach (var local in storedLocals) {
@@ -281,13 +296,13 @@ namespace Sharpin2 {
 
             // Time to apply the patch
             List<Instruction> atList = FindInjectionPoint(inject, targetMethod);
-            if(atList.Count != inject.ExpectedInjections) {
+            if (atList.Count != inject.ExpectedInjections) {
                 throw new MixinException("Expected a maximum injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
             }
             foreach (var at in atList) {
                 var newLabelTarget = insnList[0];
-                foreach(var inst in targetMethod.Body.Instructions) {
-                    if(inst.OpCode.OperandType == OperandType.InlineBrTarget || inst.OpCode.OperandType == OperandType.ShortInlineBrTarget) {
+                foreach (var inst in targetMethod.Body.Instructions) {
+                    if (inst.OpCode.OperandType == OperandType.InlineBrTarget || inst.OpCode.OperandType == OperandType.ShortInlineBrTarget) {
                         inst.Operand = newLabelTarget;
                     }
                 }
@@ -300,10 +315,10 @@ namespace Sharpin2 {
             if (inject.At == "HEAD") {
                 list.Add(targetMethod.Body.Instructions[0]);
             } else if (inject.At == "RETURN") {
-                foreach(Instruction inst in targetMethod.Body.Instructions) {
-                    if(inst.OpCode == OpCodes.Ret) {
+                foreach (Instruction inst in targetMethod.Body.Instructions) {
+                    if (inst.OpCode == OpCodes.Ret) {
                         Instruction found = inst;
-                        while(found.Previous != null && IsLdOpCode(found.Previous.OpCode)) {
+                        while (found.Previous != null && IsLdOpCode(found.Previous.OpCode)) {
                             found = found.Previous;
                         }
                         list.Add(found);
@@ -312,7 +327,7 @@ namespace Sharpin2 {
             } else {
                 foreach (Instruction inst in targetMethod.Body.Instructions) {
                     var instString = inst.ToString();
-                    if(inject.At == instString) {
+                    if (inject.At == instString) {
                         Instruction found = inst;
                         while (found.Previous != null && IsLdOpCode(found.Previous.OpCode)) {
                             found = found.Previous;
@@ -333,12 +348,15 @@ namespace Sharpin2 {
             if (targetMethod == null) {
                 throw new MixinException("Target method '" + overwrite.Target + "' not found in target module for [Overwrite] in " + mixin.MixinContainer.FullName);
             }
+            targetMethod.Body.Variables.Clear();
+            foreach (var local in overwrite.NewMethod.Body.Variables) {
+                targetMethod.Body.Variables.Add(local);
+            }
             targetMethod.Body.Instructions.Clear();
             var il = targetMethod.Body.GetILProcessor();
             foreach (var inst in overwrite.NewMethod.Body.Instructions) {
                 il.Append(inst.ToModule(targetModule));
             }
-            target.Methods.Add(targetMethod);
         }
 
     }

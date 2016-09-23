@@ -11,6 +11,8 @@ namespace CleanTest {
             Console.WriteLine("Testing SimpleInject with capture & store:");
             test.TestInjectSimple();
             Console.WriteLine("Testing Overwrite: " + test.TestOverwrite());
+            Console.WriteLine("Alright, and now for the grand finale:");
+            test.TestInjectCancelTarget();
             Console.ReadLine();
         }
     }
