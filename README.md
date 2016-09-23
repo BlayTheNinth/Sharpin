@@ -58,7 +58,7 @@ These are the locals (with name, pretend it's a Debug build):
 )
 ```
 
-Sadly locals lose their names on Release builds, so we have to access them by index.
+> Sadly locals lose their names on Release builds, so we have to access them by index.
 
 The following will grab the `modifiedDamage` right before it's applied via `SomeCharacter::ReduceHealth`
 
@@ -83,10 +83,8 @@ Apart from these, specific instructions can be named in a similar manner that yo
 `IL_0017: call System.Void SomeCharacter::ReduceHealth(System.Int32)`
 
 > Note that injection points will always be shifted backwards to a state of empty stack. This means that if we have bytecode that looks like
-
-```
-IL_0009: ldloc.0
-IL_000a: ret
-```
-
+> ```
+> IL_0009: ldloc.0
+> IL_000a: ret
+> ```
 > and we specify `RETURN` or `IL_000a: ret` as injection point, the actual injection point will end up right before `IL_0009: ldloc.0`.
