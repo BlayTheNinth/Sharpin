@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Collections.Generic;
 
 using Mono.Cecil;
 using Mono.Cecil.Cil;
@@ -36,6 +32,11 @@ namespace Sharpin2 {
             }
             inst.Offset = 0;
             return inst;
+        }
+
+        public static VariableDefinition ToModule(this VariableDefinition local, ModuleDefinition module) {
+            local.VariableType = module.ImportReference(local.VariableType);
+            return local;
         }
 
         public static void InsertAfter(this ILProcessor il, Instruction after, List<Instruction> insnList) {

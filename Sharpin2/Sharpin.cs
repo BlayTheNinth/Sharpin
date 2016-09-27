@@ -14,6 +14,8 @@ namespace Sharpin2 {
         private readonly ModuleDefinition targetModule;
         private readonly ModuleDefinition patchModule;
 
+        public bool DumpOnError { get; set; }
+
         public Sharpin(string targetLibrary, string patchLibrary) {
             this.targetModule = ModuleDefinition.ReadModule(targetLibrary, new ReaderParameters { AssemblyResolver = assemblyResolver });
             assemblyResolver.AddToCache(this.targetModule);
@@ -114,6 +116,9 @@ namespace Sharpin2 {
 
             // Create the callback method based on the patch method
             var callbackMethod = new MethodDefinition(mixin.MixinContainer.Name + "_" + inject.NewMethod.Name, MethodAttributes.HideBySig, targetModule.TypeSystem.Void);
+            foreach(var local in inject.NewMethod.Body.Variables) {
+                callbackMethod.Body.Variables.Add(local.ToModule(targetModule));
+            }
             var capturedLocals = new List<VariableDefinition>();
             var storedLocals = new List<VariableDefinition>();
             foreach (var parameter in inject.NewMethod.Parameters) {
@@ -202,7 +207,7 @@ namespace Sharpin2 {
                     var instString = inst.ToString();
                     if (inject.CancelTarget == instString) {
                         found = inst;
-                        while (found.Previous != null && IsLdOpCode(found.Previous.OpCode)) {
+                        while (found.Previous != null && IsLdInstruction(found.Previous)) {
                             found = found.Previous;
                         }
                     }
@@ -216,17 +221,32 @@ namespace Sharpin2 {
             // Time to apply the patch
             List<Instruction> atList = FindInjectionPoint(inject, targetMethod);
             if (atList.Count != inject.ExpectedInjections) {
-                throw new MixinException("Expected a maximum injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
+                if(DumpOnError) {
+                    DumpMethod(mixin, targetMethod);
+                }
+                throw new MixinException("Expected an injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
             }
             foreach (var at in atList) {
                 var newLabelTarget = insnList[0];
                 foreach (var inst in targetMethod.Body.Instructions) {
                     if (inst.OpCode.OperandType == OperandType.InlineBrTarget || inst.OpCode.OperandType == OperandType.ShortInlineBrTarget) {
-                        inst.Operand = newLabelTarget;
+                        if (inst.Operand == at) {
+                            inst.Operand = newLabelTarget;
+                        }
                     }
                 }
                 il.InsertBefore(at, insnList);
             }
+        }
+
+        private void DumpMethod(MixinInfo mixin, MethodDefinition method) {
+            var dumpFile = mixin.MixinContainer + "_" + method + "_" + DateTime.Now.ToString("yyyyMMddHHmmssffff") + "_dump.txt";
+            dumpFile = dumpFile.Replace(':', '_');
+            System.IO.StreamWriter sw = new System.IO.StreamWriter(dumpFile);
+            foreach(var inst in method.Body.Instructions) {
+                sw.WriteLine("\t" + inst);
+            }
+            sw.Close();
         }
 
         private void ApplyInjectSimple(MixinInfo mixin, TypeDefinition targetType, MethodDefinition targetMethod, InjectInfo inject) {
@@ -243,6 +263,9 @@ namespace Sharpin2 {
 
             // Create the callback method based on the patch method
             var callbackMethod = new MethodDefinition(mixin.MixinContainer.Name + "_" + inject.NewMethod.Name, MethodAttributes.HideBySig, targetModule.TypeSystem.Void);
+            foreach (var local in inject.NewMethod.Body.Variables) {
+                callbackMethod.Body.Variables.Add(local.ToModule(targetModule));
+            }
             var capturedLocals = new List<VariableDefinition>();
             var storedLocals = new List<VariableDefinition>();
             foreach (var parameter in inject.NewMethod.Parameters) {
@@ -297,20 +320,22 @@ namespace Sharpin2 {
             // Time to apply the patch
             List<Instruction> atList = FindInjectionPoint(inject, targetMethod);
             if (atList.Count != inject.ExpectedInjections) {
-                throw new MixinException("Expected a maximum injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
+                throw new MixinException("Expected an injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
             }
             foreach (var at in atList) {
                 var newLabelTarget = insnList[0];
                 foreach (var inst in targetMethod.Body.Instructions) {
                     if (inst.OpCode.OperandType == OperandType.InlineBrTarget || inst.OpCode.OperandType == OperandType.ShortInlineBrTarget) {
-                        inst.Operand = newLabelTarget;
+                        if (inst.Operand == at) {
+                            inst.Operand = newLabelTarget;
+                        }
                     }
                 }
                 il.InsertBefore(at, insnList);
             }
         }
 
-        private static List<Instruction> FindInjectionPoint(InjectInfo inject, MethodDefinition targetMethod) {
+        private List<Instruction> FindInjectionPoint(InjectInfo inject, MethodDefinition targetMethod) {
             List<Instruction> list = new List<Instruction>();
             if (inject.At == "HEAD") {
                 list.Add(targetMethod.Body.Instructions[0]);
@@ -318,7 +343,7 @@ namespace Sharpin2 {
                 foreach (Instruction inst in targetMethod.Body.Instructions) {
                     if (inst.OpCode == OpCodes.Ret) {
                         Instruction found = inst;
-                        while (found.Previous != null && IsLdOpCode(found.Previous.OpCode)) {
+                        while (found.Previous != null && IsLdInstruction(found.Previous)) {
                             found = found.Previous;
                         }
                         list.Add(found);
@@ -329,7 +354,7 @@ namespace Sharpin2 {
                     var instString = inst.ToString();
                     if (inject.At == instString) {
                         Instruction found = inst;
-                        while (found.Previous != null && IsLdOpCode(found.Previous.OpCode)) {
+                        while (found.Previous != null && IsLdInstruction(found.Previous)) {
                             found = found.Previous;
                         }
                         list.Add(found);
@@ -339,8 +364,15 @@ namespace Sharpin2 {
             return list;
         }
 
-        private static bool IsLdOpCode(OpCode opCode) {
-            return opCode.StackBehaviourPush != StackBehaviour.Push0;
+        private bool IsLdInstruction(Instruction inst) {
+            if(inst.OpCode.StackBehaviourPush == StackBehaviour.Varpush) {
+                if(inst.Operand is MethodReference) {
+                    return ((MethodReference) inst.Operand).ReturnType != targetModule.TypeSystem.Void;
+                } else {
+                    throw new NotSupportedException("fix me");
+                }
+            }
+            return inst.OpCode.StackBehaviourPush != StackBehaviour.Push0;
         }
 
         private void ApplyOverwrite(MixinInfo mixin, TypeDefinition target, OverwriteInfo overwrite) {
