@@ -21,6 +21,7 @@ namespace Sharpin2 {
                 }
             }
             sw.Close();
+            module.Dispose();
         }
 
         public static void ApplyAccessTransformer(string targetFile, string outputFile, string at) {
@@ -112,6 +113,7 @@ namespace Sharpin2 {
                 }
             }
             module.Write(outputFile);
+            module.Dispose();
         }
     }
 }
