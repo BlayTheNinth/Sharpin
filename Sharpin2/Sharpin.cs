@@ -108,8 +108,8 @@ namespace Sharpin2 {
             }
 
             // Retrieve the method signatures and compare them (minus the CallbackInfo)
-            var targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName));
-            var patchMethodParams = string.Join(",", inject.NewMethod.Parameters.Where(t => t.ParameterType != callbackInfoType).Select(t => t.ParameterType.FullName));
+            var targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName).ToArray());
+            var patchMethodParams = string.Join(",", inject.NewMethod.Parameters.Where(t => t.ParameterType != callbackInfoType).Select(t => t.ParameterType.FullName).ToArray());
             if (patchMethodParams != targetMethodParams) {
                 throw new MixinException("Target method has mismatching parameters " + targetMethod.ReturnType.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
             }
@@ -251,12 +251,12 @@ namespace Sharpin2 {
 
         private void ApplyInjectSimple(MixinInfo mixin, TypeDefinition targetType, MethodDefinition targetMethod, InjectInfo inject) {
             // Retrieve the method signatures and compare them (minus the CallbackInfo)
-            var targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName));
+            var targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName).ToArray());
             var patchMethodParams = string.Join(",", inject.NewMethod.Parameters
                 .Where(t
                     => !t.CustomAttributes.Any(a => a.AttributeType.FullName == typeof(CaptureLocal).FullName)
                     && !t.CustomAttributes.Any(a => a.AttributeType.FullName == typeof(StoreLocal).FullName))
-                .Select(t => t.ParameterType.FullName));
+                .Select(t => t.ParameterType.FullName).ToArray());
             if (patchMethodParams != targetMethodParams) {
                 throw new MixinException("Target method has mismatching parameters " + targetMethod.ReturnType.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
             }
