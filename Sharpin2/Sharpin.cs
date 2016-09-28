@@ -119,6 +119,17 @@ namespace Sharpin2 {
             foreach(var local in inject.NewMethod.Body.Variables) {
                 callbackMethod.Body.Variables.Add(local.ToModule(targetModule));
             }
+            var capturedFields = new Dictionary<string, FieldDefinition>();
+            foreach(var field in mixin.MixinContainer.Fields) {
+                if (AttrHelper.HasAttribute(field, typeof(CaptureField))) {
+                    CaptureFieldInfo captureField = new CaptureFieldInfo(field);
+                    var targetField = targetType.Fields.SingleOrDefault(t => t.Name == captureField.Field);
+                    if(targetField == null) {
+                        throw new MixinException("Failed to capture field, " + captureField.Field + " not found in " + targetType.FullName + " for " + mixin.MixinContainer.FullName);
+                    }
+                    capturedFields.Add(field.Name, targetField);
+                }
+            }
             var capturedLocals = new List<VariableDefinition>();
             var storedLocals = new List<VariableDefinition>();
             foreach (var parameter in inject.NewMethod.Parameters) {
@@ -143,7 +154,14 @@ namespace Sharpin2 {
             }
             var il = callbackMethod.Body.GetILProcessor();
             foreach (var inst in inject.NewMethod.Body.Instructions) {
-                il.Append(inst.ToModule(targetModule));
+                var newInst = inst.ToModule(targetModule);
+                if(newInst.OpCode.OperandType == OperandType.InlineField) {
+                    FieldDefinition targetField;
+                    if(capturedFields.TryGetValue(((FieldReference) newInst.Operand).Name, out targetField)) {
+                        newInst.Operand = targetField;
+                    }
+                }
+                il.Append(newInst);
             }
             targetType.Methods.Add(callbackMethod);
 
@@ -240,7 +258,7 @@ namespace Sharpin2 {
         }
 
         private void DumpMethod(MixinInfo mixin, MethodDefinition method) {
-            var dumpFile = mixin.MixinContainer + "_" + method + "_" + DateTime.Now.ToString("yyyyMMddHHmmssffff") + "_dump.txt";
+            var dumpFile = "ErrorDump_" + mixin.MixinContainer + "_" + method + "_" + DateTime.Now.ToString("yyyyMMddHHmmssffff") + ".txt";
             dumpFile = dumpFile.Replace(':', '_');
             System.IO.StreamWriter sw = new System.IO.StreamWriter(dumpFile);
             foreach(var inst in method.Body.Instructions) {
@@ -249,6 +267,7 @@ namespace Sharpin2 {
             sw.Close();
         }
 
+        // TODO clean this up, it has a lot of duplicate code with ApplyInjectCancellable
         private void ApplyInjectSimple(MixinInfo mixin, TypeDefinition targetType, MethodDefinition targetMethod, InjectInfo inject) {
             // Retrieve the method signatures and compare them (minus the CallbackInfo)
             var targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName).ToArray());
@@ -265,6 +284,17 @@ namespace Sharpin2 {
             var callbackMethod = new MethodDefinition(mixin.MixinContainer.Name + "_" + inject.NewMethod.Name, MethodAttributes.HideBySig, targetModule.TypeSystem.Void);
             foreach (var local in inject.NewMethod.Body.Variables) {
                 callbackMethod.Body.Variables.Add(local.ToModule(targetModule));
+            }
+            var capturedFields = new Dictionary<string, FieldDefinition>();
+            foreach (var field in mixin.MixinContainer.Fields) {
+                if (AttrHelper.HasAttribute(field, typeof(CaptureField))) {
+                    CaptureFieldInfo captureField = new CaptureFieldInfo(field);
+                    var targetField = targetType.Fields.SingleOrDefault(t => t.Name == captureField.Field);
+                    if (targetField == null) {
+                        throw new MixinException("Failed to capture field, " + captureField.Field + " not found in " + targetType.FullName + " for " + mixin.MixinContainer.FullName);
+                    }
+                    capturedFields.Add(field.Name, targetField);
+                }
             }
             var capturedLocals = new List<VariableDefinition>();
             var storedLocals = new List<VariableDefinition>();
@@ -292,7 +322,14 @@ namespace Sharpin2 {
 
             var il = callbackMethod.Body.GetILProcessor();
             foreach (var inst in inject.NewMethod.Body.Instructions) {
-                il.Append(inst.ToModule(targetModule));
+                var newInst = inst.ToModule(targetModule);
+                if (newInst.OpCode.OperandType == OperandType.InlineField) {
+                    FieldDefinition targetField;
+                    if (capturedFields.TryGetValue(((FieldReference) newInst.Operand).Name, out targetField)) {
+                        newInst.Operand = targetField;
+                    }
+                }
+                il.Append(newInst);
             }
             targetType.Methods.Add(callbackMethod);
 

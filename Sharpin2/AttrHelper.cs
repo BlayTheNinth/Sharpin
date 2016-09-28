@@ -8,6 +8,10 @@ namespace Sharpin2 {
             return param.CustomAttributes.Any(t => t.AttributeType.FullName == type.FullName);
         }
 
+        public static bool HasAttribute(this FieldDefinition field, Type type) {
+            return field.CustomAttributes.Any(t => t.AttributeType.FullName == type.FullName);
+        }
+
         public static CustomAttribute GetAttribute(this ParameterDefinition param, Type type) {
             return param.CustomAttributes.Single(t => t.AttributeType.FullName == type.FullName);
         }
@@ -32,6 +36,9 @@ namespace Sharpin2 {
             var field = attr.Fields.FirstOrDefault(f => f.Name == name);
             if (field.Name == name) {
                 return (T) field.Argument.Value;
+            }
+            if(attr.ConstructorArguments.Count <= index) {
+                return default(T);
             }
             return (T) attr.ConstructorArguments[index].Value;
         }
