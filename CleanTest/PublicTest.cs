@@ -29,6 +29,10 @@
             return 9001;
         }
 
+        public void TestImplements(PublicTest pt) {
+            System.Console.WriteLine("Oops, the overwrite for TestImplements failed?");
+        }
+
         public string TestOverwrite() {
             return "Failure!";
         }

@@ -6,7 +6,8 @@ using CleanTest;
 namespace MixinTest
 {
     [Mixin(typeof(PublicTest))]
-    public abstract class MixinPublicTest : PublicTest
+    [Implements(typeof(MixinInterface))]
+    public abstract class MixinPublicTest : PublicTest, MixinInterface
     {
         public string thisWillBreak = "definitely";
 
@@ -32,6 +33,13 @@ namespace MixinTest
             }
         }
 
+        [Overwrite]
+        public new void TestImplements(PublicTest pt) {
+            Console.WriteLine("oh dear, testing the thing now");
+            MixinInterface itf = (MixinInterface) pt;
+            Console.WriteLine(itf.CoolThings());
+        }
+
         [Inject(method = "System.Void CleanTest.PublicTest::TestInjectSimple()", at = "IL_0017: call System.Void System.Console::WriteLine(System.String)")]
         public void TestInjectSimple([CaptureLocal(0, typeof(int))] int mouseX, [StoreLocal(0, typeof(int))] out int outMouseX) {
             Console.WriteLine("Got the local: " + mouseX);
@@ -45,6 +53,10 @@ namespace MixinTest
 
         public bool YouProbablyShouldntDoThis() {
             return OtherClass.TestingThisToo(this) && this.thisWillBreak == "definitely";
+        }
+
+        public string CoolThings() {
+            return "yes, cool things are cool";
         }
     }
 }

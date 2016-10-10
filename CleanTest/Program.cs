@@ -13,6 +13,8 @@ namespace CleanTest {
             Console.WriteLine("Testing Overwrite: " + test.TestOverwrite());
             Console.WriteLine("Alright, and now for the grand finale:");
             test.TestInjectCancelTarget();
+            Console.WriteLine("doodoodoo");
+            test.TestImplements(test);
             Console.ReadLine();
         }
     }

@@ -40,6 +40,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MixinInterface.cs" />
     <Compile Include="MixinPublicTest.cs" />
     <Compile Include="OtherClass.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

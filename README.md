@@ -72,6 +72,24 @@ public abstract class MixinSpearKill : SpearKill {
 }
 ```
 
+### Implements
+
+```csharp
+
+public interface IMonster {
+    public int Health { get; set; }
+}
+
+[Mixin(typeof(StardewValley.Monsters.Monster))]
+[Implements(typeof(StardewAPI.Monster))]
+public class MixinMonster : StardewValley.Monsters.Monster, IMonster {
+    public int Health {
+        get { return this.health; }
+        set { this.health = value; }
+    }
+}
+```
+
 ### CaptureLocal & StoreLocal
 
 Pretend we have `SomeCharacter` with an `OnDamage` function that takes a base value, and inside it does calculations to get a modified value based on the character's armor stats or something.

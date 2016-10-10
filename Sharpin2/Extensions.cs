@@ -29,6 +29,8 @@ namespace Sharpin2 {
                 inst.Operand = module.ImportReference(inst.Operand as FieldReference);
             } else if (inst.Operand is TypeReference) {
                 inst.Operand = module.ImportReference(inst.Operand as TypeReference);
+            } else {
+                System.Console.WriteLine(inst.Operand);
             }
             inst.Offset = 0;
             return inst;

@@ -60,6 +60,10 @@ namespace Sharpin2 {
         }
 
         private void ApplyMixinToType(MixinInfo mixin, TypeDefinition target) {
+            var implements = mixin.MixinContainer.CustomAttributes.Where(a => a.AttributeType.FullName == typeof(Implements).FullName);
+            foreach(var implement in implements) {
+                ApplyImplements(mixin, target, new ImplementsInfo(target, implement));
+            }
             var overwrites = mixin.MixinContainer.Methods.Where(m => m.CustomAttributes.Any(a => a.AttributeType.FullName == typeof(Overwrite).FullName));
             foreach (var overwrite in overwrites) {
                 ApplyOverwrite(mixin, target, new OverwriteInfo(target, overwrite));
@@ -67,6 +71,31 @@ namespace Sharpin2 {
             var injects = mixin.MixinContainer.Methods.Where(m => m.CustomAttributes.Any(a => a.AttributeType.FullName == typeof(Inject).FullName));
             foreach (var inject in injects) {
                 ApplyInject(mixin, target, new InjectInfo(inject));
+            }
+        }
+
+        private void ApplyImplements(MixinInfo mixin, TypeDefinition targetType, ImplementsInfo implements) {
+            TypeReference interfaceType = targetModule.ImportReference(implements.TargetType);
+            InterfaceImplementation impl = new InterfaceImplementation(interfaceType);
+            targetType.Interfaces.Add(impl);
+
+            TypeDefinition interfaceTypeDef = interfaceType.Resolve();
+            foreach(var expectedMethod in interfaceTypeDef.Methods) {
+                var expectedParameters = string.Join(",", expectedMethod.Parameters.Select(t => t.ParameterType.FullName).ToArray());
+                var foundMethod = mixin.MixinContainer.Methods.SingleOrDefault(t => t.Name == expectedMethod.Name && expectedParameters == string.Join(",", t.Parameters.Select(p => p.ParameterType.FullName).ToArray()));
+                if (foundMethod == null) {
+                    throw new MixinException("Interface method '" + expectedMethod.FullName + "' not found in mixin class for [Implements] in " + mixin.MixinContainer.FullName);
+                }
+                MethodDefinition newMethod = new MethodDefinition(foundMethod.Name, foundMethod.Attributes, targetModule.ImportReference(foundMethod.ReturnType));
+                newMethod.Body = new MethodBody(newMethod);
+                foreach (var local in foundMethod.Body.Variables) {
+                    newMethod.Body.Variables.Add(local.ToModule(targetModule));
+                }
+                var il = newMethod.Body.GetILProcessor();
+                foreach (var inst in foundMethod.Body.Instructions) {
+                    il.Append(inst.ToModule(targetModule));
+                }
+                targetType.Methods.Add(newMethod);
             }
         }
 
@@ -259,7 +288,7 @@ namespace Sharpin2 {
 
         private void DumpMethod(MixinInfo mixin, MethodDefinition method) {
             var dumpFile = "ErrorDump_" + mixin.MixinContainer + "_" + method + "_" + DateTime.Now.ToString("yyyyMMddHHmmssffff") + ".txt";
-            dumpFile = dumpFile.Replace(':', '_');
+            dumpFile = dumpFile.Replace(':', '_').Replace('<', '_').Replace('>', '_').Replace('/', '_');
             System.IO.StreamWriter sw = new System.IO.StreamWriter(dumpFile);
             foreach(var inst in method.Body.Instructions) {
                 sw.WriteLine("\t" + inst);
@@ -357,6 +386,9 @@ namespace Sharpin2 {
             // Time to apply the patch
             List<Instruction> atList = FindInjectionPoint(inject, targetMethod);
             if (atList.Count != inject.ExpectedInjections) {
+                if (DumpOnError) {
+                    DumpMethod(mixin, targetMethod);
+                }
                 throw new MixinException("Expected an injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + mixin.MixinContainer.FullName);
             }
             foreach (var at in atList) {
@@ -419,7 +451,7 @@ namespace Sharpin2 {
             }
             targetMethod.Body.Variables.Clear();
             foreach (var local in overwrite.NewMethod.Body.Variables) {
-                targetMethod.Body.Variables.Add(local);
+                targetMethod.Body.Variables.Add(local.ToModule(targetModule));
             }
             targetMethod.Body.Instructions.Clear();
             var il = targetMethod.Body.GetILProcessor();

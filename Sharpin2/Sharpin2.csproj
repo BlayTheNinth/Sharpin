@@ -52,6 +52,7 @@
     <Compile Include="CaptureLocal.cs" />
     <Compile Include="CaptureLocalInfo.cs" />
     <Compile Include="Extensions.cs" />
+    <Compile Include="Implements.cs" />
     <Compile Include="InjectInfo.cs" />
     <Compile Include="MixinException.cs" />
     <Compile Include="AccessTransformerException.cs" />
@@ -59,6 +60,7 @@
     <Compile Include="Inject.cs" />
     <Compile Include="Mixin.cs" />
     <Compile Include="CaptureFieldInfo.cs" />
+    <Compile Include="ImplementsInfo.cs" />
     <Compile Include="MixinInfo.cs" />
     <Compile Include="Overwrite.cs" />
     <Compile Include="OverwriteInfo.cs" />
