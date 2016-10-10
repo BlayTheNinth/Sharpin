@@ -81,7 +81,7 @@ public interface IMonster {
 }
 
 [Mixin(typeof(StardewValley.Monsters.Monster))]
-[Implements(typeof(StardewAPI.Monster))]
+[Implements(typeof(IMonster))]
 public class MixinMonster : StardewValley.Monsters.Monster, IMonster {
     public int Health {
         get { return this.health; }
