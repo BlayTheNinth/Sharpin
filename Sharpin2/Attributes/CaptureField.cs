@@ -3,10 +3,10 @@
 namespace Sharpin2 {
     [AttributeUsage(AttributeTargets.Field)]
     public class CaptureField : Attribute {
-        public string field;
+        public string Field;
 
         public CaptureField(string field) {
-            this.field = field;
+            Field = field;
         }
     }
 }

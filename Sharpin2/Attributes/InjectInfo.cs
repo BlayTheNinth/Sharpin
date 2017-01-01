@@ -12,13 +12,13 @@ namespace Sharpin2 {
         public int ExpectedInjections { get; }
 
         public InjectInfo(MethodDefinition newMethod) {
-            this.NewMethod = newMethod;
+            NewMethod = newMethod;
             var attr = newMethod.CustomAttributes.First(a => a.AttributeType.FullName == typeof(Inject).FullName);
-            this.Method = AttrHelper.GetAttribute<string>(attr, "method");
-            this.At = AttrHelper.GetAttribute<string>(attr, "at");
-            this.Cancellable = AttrHelper.GetAttribute<bool>(attr, "cancellable");
-            this.CancelTarget = AttrHelper.GetAttribute<string>(attr, "cancelTarget", "ret");
-            this.ExpectedInjections = AttrHelper.GetAttribute<int>(attr, "expectedInjections", 1);
+            Method = AttrHelper.GetAttribute<string>(attr, "Method");
+            At = AttrHelper.GetAttribute<string>(attr, "At");
+            Cancellable = AttrHelper.GetAttribute<bool>(attr, "Cancellable");
+            CancelTarget = AttrHelper.GetAttribute(attr, "CancelTarget", "ret");
+            ExpectedInjections = AttrHelper.GetAttribute(attr, "ExpectedInjections", 1);
         }
     }
 }

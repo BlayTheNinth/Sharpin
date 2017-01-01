@@ -1,5 +1,4 @@
-﻿using System.Linq;
-using Mono.Cecil;
+﻿using Mono.Cecil;
 
 namespace Sharpin2 {
     public struct ImplementsInfo {
@@ -7,8 +6,8 @@ namespace Sharpin2 {
         public TypeReference TargetType { get; }
 
         public ImplementsInfo(TypeDefinition mixinContainer, CustomAttribute attr) {
-            this.MixinContainer = mixinContainer;
-            this.TargetType = AttrHelper.GetConstructorAttribute<TypeReference>(attr, "targetType");
+            MixinContainer = mixinContainer;
+            TargetType = AttrHelper.GetConstructorAttribute<TypeReference>(attr, "TargetType");
         }
 
     }

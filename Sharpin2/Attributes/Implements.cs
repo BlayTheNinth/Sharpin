@@ -3,10 +3,10 @@
 namespace Sharpin2 {
     [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
     public class Implements : Attribute {
-        public Type targetType;
+        public Type TargetType;
 
         public Implements(Type targetType) {
-            this.targetType = targetType;
+            TargetType = targetType;
         }
     }
 }

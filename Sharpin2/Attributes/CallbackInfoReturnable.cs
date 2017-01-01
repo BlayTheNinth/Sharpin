@@ -1,13 +1,13 @@
 ﻿namespace Sharpin2 {
     public class CallbackInfoReturnable<T> : CallbackInfo {
-        private T returnValue;
+        private T _returnValue;
         public T ReturnValue {
             get {
-                return returnValue;
+                return _returnValue;
             }
             set {
-                this.Cancel();
-                this.returnValue = value;
+                Cancel();
+                _returnValue = value;
             }
         }
     }
