@@ -82,6 +82,7 @@ namespace Sharpin2 {
 			}
 
 			if (inject.Cancellable) {
+				ApplyInjectCancellable(inject, targetMethod);
 			} else {
 				ApplyInjectSimple(inject, targetMethod);
 			}
@@ -108,176 +109,10 @@ namespace Sharpin2 {
 				if (foundMethod == null) {
 					throw new MixinException("Interface Method '" + expectedMethod.FullName + "' not found in mixin class for [Implements] in " + _mixin.MixinContainer.FullName);
 				}
-				// TODO the following should be replaced by a general "PortMethodToModule" thing but use ApplyInjectCancellable as base
+
 				var newMethod = new MethodDefinition(foundMethod.Name, foundMethod.Attributes, _targetModule.ImportReference(foundMethod.ReturnType));
-				newMethod.Body = new MethodBody(newMethod);
-				foreach (var local in foundMethod.Body.Variables) {
-					newMethod.Body.Variables.Add(local.ToModule(_targetModule));
-				}
-
-				var il = newMethod.Body.GetILProcessor();
-				foreach (var inst in foundMethod.Body.Instructions) {
-					il.Append(inst.ToModule(_targetModule));
-				}
-
+				TransferMethod(newMethod, foundMethod);
 				_targetType.Methods.Add(newMethod);
-			}
-		}
-
-		private void AddNewMethod(MethodDefinition newMethod) {
-			var targetMethod = new MethodDefinition(_mixin.MixinContainer.Name + "_" + newMethod.Name, MethodAttributes.HideBySig, _targetModule.TypeSystem.Void);
-			TransferMethod(targetMethod, newMethod);
-			_targetType.Methods.Add(targetMethod);
-		}
-
-		private void TransferMethod(MethodDefinition newMethod, MethodDefinition sourceMethod) {
-			// Just overwrite the old body
-			newMethod.Body = new MethodBody(newMethod);
-
-			foreach (var parameter in sourceMethod.Parameters) {
-				newMethod.Parameters.Add(parameter.ToModule(_targetModule));
-			}
-
-			// Transfer local variables
-			foreach (var local in sourceMethod.Body.Variables) {
-				newMethod.Body.Variables.Add(local.ToModule(_targetModule));
-			}
-
-			// Port all instructions to the target method and replace field references with our field reference map.
-			var il = newMethod.Body.GetILProcessor();
-			foreach (var inst in sourceMethod.Body.Instructions) {
-				var newInst = inst.ToModule(_targetModule);
-				if (newInst.OpCode.OperandType == OperandType.InlineField) {
-					FieldDefinition targetField;
-					if (_fieldReferenceMap.TryGetValue(((FieldReference) newInst.Operand).Name, out targetField)) {
-						newInst.Operand = targetField;
-					}
-				}
-				il.Append(newInst);
-			}
-		}
-
-		private void GrabLocalParameters(MethodDefinition targetMethod, MethodReference newMethod, out List<VariableDefinition> capturedLocals, out List<VariableDefinition> storedLocals) {
-			capturedLocals = new List<VariableDefinition>();
-			storedLocals = new List<VariableDefinition>();
-			foreach (var parameter in newMethod.Parameters) {
-				if (parameter.HasAttribute(typeof(CaptureLocal))) {
-					var captureInfo = new CaptureLocalInfo(parameter);
-					var local = targetMethod.Body.Variables[captureInfo.Index];
-					if (local.VariableType.FullName != captureInfo.Type.FullName) {
-						throw new MixinException("Failed to capture local, Type mismatch " + targetMethod.ReturnType.FullName + " at " + newMethod.FullName + " in " + _mixin.MixinContainer.FullName);
-					}
-
-					capturedLocals.Add(local);
-					parameter.CustomAttributes.Remove(parameter.GetAttribute(typeof(CaptureLocal)));
-				} else if (parameter.HasAttribute(typeof(StoreLocal))) {
-					var storeInfo = new StoreLocalInfo(parameter);
-					var local = targetMethod.Body.Variables[storeInfo.Index];
-					if (local.VariableType.FullName != storeInfo.Type.FullName) {
-						throw new MixinException("Failed to store local, Type mismatch " + targetMethod.ReturnType.FullName + " at " + newMethod.FullName + " in " + _mixin.MixinContainer.FullName);
-					}
-
-					storedLocals.Add(local);
-					parameter.CustomAttributes.Remove(parameter.GetAttribute(typeof(StoreLocal)));
-				}
-			}
-		}
-
-		private bool CompareMethodParams(IMethodSignature targetMethod, IMethodSignature newMethod, IMetadataTokenProvider callbackInfoType) {
-			// TODO callbackinfo yeah: .Where(t => t.ParameterType != callbackInfoType)
-			// TODO ugly hack atm
-			string targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName).ToArray());
-			string patchMethodParams = string.Join(",", newMethod.Parameters
-				.Where(t
-					=> t.CustomAttributes.All(a => a.AttributeType.FullName != typeof(CaptureLocal).FullName) &&
-					   t.CustomAttributes.All(a => a.AttributeType.FullName != typeof(StoreLocal).FullName) &&
-					   t.ParameterType != callbackInfoType)
-
-				.Select(t => t.ParameterType.FullName)
-				.ToArray());
-			return patchMethodParams == targetMethodParams;
-		}
-
-		/// <summary>
-		/// Returns a list of injection points based on the InjectInfo passed to the function.
-		/// * For HEAD, the injection point will always be the first instruction, and there will only be one at all times.
-		/// * For RETURN, there will be one injection point per ret opcode. The injection point will be moved right before something is loaded onto the stack.
-		/// * Anything else is interpreted as IL-Code and will result in one injection point per matching instruction. The injection point will be moved right before something is loaded onto the stack.
-		/// </summary>
-		/// <returns>A list of instructions each serving as an injection point.</returns>
-		private List<Instruction> FindInjectionPoint(InjectInfo inject, MethodDefinition targetMethod) {
-			var list = new List<Instruction>();
-			switch (inject.At) {
-				case "HEAD":
-					list.Add(targetMethod.Body.Instructions[0]);
-					break;
-				case "RETURN":
-					foreach (var inst in targetMethod.Body.Instructions) {
-						if (inst.OpCode == OpCodes.Ret) {
-							var found = inst;
-							while (found.Previous != null && found.Previous.IsLdInstruction(_targetModule)) {
-								found = found.Previous;
-							}
-
-							list.Add(found);
-						}
-					}
-
-					break;
-				default:
-					foreach (var inst in targetMethod.Body.Instructions) {
-						string instString = inst.ToString();
-						if (inject.At == instString) {
-							var found = inst;
-							while (found.Previous != null && found.Previous.IsLdInstruction(_targetModule)) {
-								found = found.Previous;
-							}
-
-							list.Add(found);
-							break;
-						}
-					}
-
-					break;
-			}
-
-			return list;
-		}
-
-		private MethodDefinition CreateCallbackMethod(InjectInfo inject, MethodDefinition targetMethod, IMetadataTokenProvider callbackInfoType, out List<VariableDefinition> capturedLocals, out List<VariableDefinition> storedLocals) {
-			if (!CompareMethodParams(targetMethod, inject.NewMethod, callbackInfoType)) {
-				throw new MixinException("Target Method has mismatching parameters " + targetMethod.ReturnType.FullName + " At " + inject.NewMethod.FullName + " in " + _mixin.MixinContainer.FullName);
-			}
-
-			var callbackMethod = new MethodDefinition(_mixin.MixinContainer.Name + "_" + inject.NewMethod.Name, MethodAttributes.HideBySig, _targetModule.TypeSystem.Void);
-
-			TransferMethod(callbackMethod, inject.NewMethod);
-
-			GrabLocalParameters(targetMethod, callbackMethod, out capturedLocals, out storedLocals);
-
-			_targetType.Methods.Add(callbackMethod);
-			return callbackMethod;
-		}
-
-		private void PatchMethod(InjectInfo inject, MethodDefinition targetMethod, ILProcessor il, List<Instruction> patchBody) {
-			// Time to actually apply the patch at its injection points
-			var atList = FindInjectionPoint(inject, targetMethod);
-			// If the amount of injection points does not match expectations, abort - target code has likely changed
-			if (atList.Count != inject.ExpectedInjections) {
-				throw new MixinInjectionException("Expected an injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + _mixin.MixinContainer.FullName, targetMethod);
-			}
-			// Update all jumps to injection point(s) to now jump to our hook instead (so they won't just skip past us)
-			foreach (var at in atList) {
-				var newLabelTarget = patchBody[0];
-				foreach (var inst in targetMethod.Body.Instructions) {
-					if (inst.OpCode.OperandType == OperandType.InlineBrTarget || inst.OpCode.OperandType == OperandType.ShortInlineBrTarget) {
-						if (inst.Operand == at) {
-							inst.Operand = newLabelTarget;
-						}
-					}
-				}
-
-				il.InsertBefore(at, patchBody);
 			}
 		}
 
@@ -405,6 +240,156 @@ namespace Sharpin2 {
 			}
 
 			PatchMethod(inject, targetMethod, il, insnList);
+		}
+
+		private void TransferMethod(MethodDefinition newMethod, MethodDefinition sourceMethod) {
+			// Just overwrite the old body
+			newMethod.Body = new MethodBody(newMethod);
+
+			foreach (var parameter in sourceMethod.Parameters) {
+				newMethod.Parameters.Add(parameter.ToModule(_targetModule));
+			}
+
+			// Transfer local variables
+			foreach (var local in sourceMethod.Body.Variables) {
+				newMethod.Body.Variables.Add(local.ToModule(_targetModule));
+			}
+
+			// Port all instructions to the target method and replace field references with our field reference map.
+			var il = newMethod.Body.GetILProcessor();
+			foreach (var inst in sourceMethod.Body.Instructions) {
+				var newInst = inst.ToModule(_targetModule);
+				if (newInst.OpCode.OperandType == OperandType.InlineField) {
+					FieldDefinition targetField;
+					if (_fieldReferenceMap.TryGetValue(((FieldReference) newInst.Operand).Name, out targetField)) {
+						newInst.Operand = targetField;
+					}
+				}
+				il.Append(newInst);
+			}
+		}
+
+		private void GrabLocalParameters(MethodDefinition targetMethod, MethodReference newMethod, out List<VariableDefinition> capturedLocals, out List<VariableDefinition> storedLocals) {
+			capturedLocals = new List<VariableDefinition>();
+			storedLocals = new List<VariableDefinition>();
+			foreach (var parameter in newMethod.Parameters) {
+				if (parameter.HasAttribute(typeof(CaptureLocal))) {
+					var captureInfo = new CaptureLocalInfo(parameter);
+					var local = targetMethod.Body.Variables[captureInfo.Index];
+					if (local.VariableType.FullName != captureInfo.Type.FullName) {
+						throw new MixinException("Failed to capture local, Type mismatch " + targetMethod.ReturnType.FullName + " at " + newMethod.FullName + " in " + _mixin.MixinContainer.FullName);
+					}
+
+					capturedLocals.Add(local);
+					parameter.CustomAttributes.Remove(parameter.GetAttribute(typeof(CaptureLocal)));
+				} else if (parameter.HasAttribute(typeof(StoreLocal))) {
+					var storeInfo = new StoreLocalInfo(parameter);
+					var local = targetMethod.Body.Variables[storeInfo.Index];
+					if (local.VariableType.FullName != storeInfo.Type.FullName) {
+						throw new MixinException("Failed to store local, Type mismatch " + targetMethod.ReturnType.FullName + " at " + newMethod.FullName + " in " + _mixin.MixinContainer.FullName);
+					}
+
+					storedLocals.Add(local);
+					parameter.CustomAttributes.Remove(parameter.GetAttribute(typeof(StoreLocal)));
+				}
+			}
+		}
+
+		private bool CompareMethodParams(IMethodSignature targetMethod, IMethodSignature newMethod, IMetadataTokenProvider callbackInfoType) {
+			// TODO callbackinfo yeah: .Where(t => t.ParameterType != callbackInfoType)
+			// TODO ugly hack atm
+			string targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName).ToArray());
+			string patchMethodParams = string.Join(",", newMethod.Parameters
+				.Where(t
+					=> t.CustomAttributes.All(a => a.AttributeType.FullName != typeof(CaptureLocal).FullName) &&
+					   t.CustomAttributes.All(a => a.AttributeType.FullName != typeof(StoreLocal).FullName) &&
+					   t.ParameterType != callbackInfoType)
+				.Select(t => t.ParameterType.FullName)
+				.ToArray());
+			return patchMethodParams == targetMethodParams;
+		}
+
+		/// <summary>
+		/// Returns a list of injection points based on the InjectInfo passed to the function.
+		/// * For HEAD, the injection point will always be the first instruction, and there will only be one at all times.
+		/// * For RETURN, there will be one injection point per ret opcode. The injection point will be moved right before something is loaded onto the stack.
+		/// * Anything else is interpreted as IL-Code and will result in one injection point per matching instruction. The injection point will be moved right before something is loaded onto the stack.
+		/// </summary>
+		/// <returns>A list of instructions each serving as an injection point.</returns>
+		private List<Instruction> FindInjectionPoint(InjectInfo inject, MethodDefinition targetMethod) {
+			var list = new List<Instruction>();
+			switch (inject.At) {
+				case "HEAD":
+					list.Add(targetMethod.Body.Instructions[0]);
+					break;
+				case "RETURN":
+					foreach (var inst in targetMethod.Body.Instructions) {
+						if (inst.OpCode == OpCodes.Ret) {
+							var found = inst;
+							while (found.Previous != null && found.Previous.IsLdInstruction(_targetModule)) {
+								found = found.Previous;
+							}
+
+							list.Add(found);
+						}
+					}
+
+					break;
+				default:
+					foreach (var inst in targetMethod.Body.Instructions) {
+						string instString = inst.ToString();
+						if (inject.At == instString) {
+							var found = inst;
+							while (found.Previous != null && found.Previous.IsLdInstruction(_targetModule)) {
+								found = found.Previous;
+							}
+
+							list.Add(found);
+							break;
+						}
+					}
+
+					break;
+			}
+
+			return list;
+		}
+
+		private MethodDefinition CreateCallbackMethod(InjectInfo inject, MethodDefinition targetMethod, IMetadataTokenProvider callbackInfoType, out List<VariableDefinition> capturedLocals, out List<VariableDefinition> storedLocals) {
+			if (!CompareMethodParams(targetMethod, inject.NewMethod, callbackInfoType)) {
+				throw new MixinException("Target Method has mismatching parameters " + targetMethod.ReturnType.FullName + " At " + inject.NewMethod.FullName + " in " + _mixin.MixinContainer.FullName);
+			}
+
+			var callbackMethod = new MethodDefinition(_mixin.MixinContainer.Name + "_" + inject.NewMethod.Name, MethodAttributes.HideBySig, _targetModule.TypeSystem.Void);
+
+			TransferMethod(callbackMethod, inject.NewMethod);
+
+			GrabLocalParameters(targetMethod, callbackMethod, out capturedLocals, out storedLocals);
+
+			_targetType.Methods.Add(callbackMethod);
+			return callbackMethod;
+		}
+
+		private void PatchMethod(InjectInfo inject, MethodDefinition targetMethod, ILProcessor il, List<Instruction> patchBody) {
+			// Time to actually apply the patch at its injection points
+			var atList = FindInjectionPoint(inject, targetMethod);
+			// If the amount of injection points does not match expectations, abort - target code has likely changed
+			if (atList.Count != inject.ExpectedInjections) {
+				throw new MixinInjectionException("Expected an injection count of " + inject.ExpectedInjections + " but got " + atList.Count + " candidates in " + targetMethod.FullName + " at " + inject.NewMethod.FullName + " in " + _mixin.MixinContainer.FullName, targetMethod);
+			}
+			// Update all jumps to injection point(s) to now jump to our hook instead (so they won't just skip past us)
+			foreach (var at in atList) {
+				var newLabelTarget = patchBody[0];
+				foreach (var inst in targetMethod.Body.Instructions) {
+					if (inst.OpCode.OperandType == OperandType.InlineBrTarget || inst.OpCode.OperandType == OperandType.ShortInlineBrTarget) {
+						if (inst.Operand == at) {
+							inst.Operand = newLabelTarget;
+						}
+					}
+				}
+
+				il.InsertBefore(at, patchBody);
+			}
 		}
 	}
 

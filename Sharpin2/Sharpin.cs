@@ -28,8 +28,8 @@ namespace Sharpin2 {
 			_mixinList.Sort();
 
 			foreach (var mixin in _mixinList) {
-				var mixinizer = new Mixor(mixin, _targetModule);
-				mixinizer.Apply();
+				var mixor = new Mixor(mixin, _targetModule);
+				mixor.Apply();
 			}
 		}
 
