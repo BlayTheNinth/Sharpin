@@ -35,7 +35,9 @@ namespace Sharpin2 {
 		}
 
 		public void Apply() {
-			var implements = _mixin.MixinContainer.CustomAttributes.Where(a => a.AttributeType.FullName == typeof(Implements).FullName); // TODO the attribute will exist in the patchModule so just grab it from there and compare directly
+            InitializeFieldReferenceMap();
+
+            var implements = _mixin.MixinContainer.CustomAttributes.Where(a => a.AttributeType.FullName == typeof(Implements).FullName); // TODO the attribute will exist in the patchModule so just grab it from there and compare directly
 			foreach (var implement in implements) {
 				ApplyImplements(new ImplementsInfo(_targetType, implement));
 			}
@@ -67,7 +69,7 @@ namespace Sharpin2 {
 					_fieldReferenceMap.Add(field.Name, targetField);
 				} else {
 					// TODO name collision check
-					var targetField = new FieldDefinition(field.Name, field.Attributes, field.FieldType);
+					var targetField = new FieldDefinition(field.Name, field.Attributes, _targetModule.ImportReference(field.FieldType));
 					// TODO all the other stuff that fields need
 					_targetType.Fields.Add(targetField);
 					_fieldReferenceMap.Add(field.Name, targetField);
@@ -296,7 +298,6 @@ namespace Sharpin2 {
 		}
 
 		private bool CompareMethodParams(IMethodSignature targetMethod, IMethodSignature newMethod, IMetadataTokenProvider callbackInfoType) {
-			// TODO callbackinfo yeah: .Where(t => t.ParameterType != callbackInfoType)
 			// TODO ugly hack atm
 			string targetMethodParams = string.Join(",", targetMethod.Parameters.Select(t => t.ParameterType.FullName).ToArray());
 			string patchMethodParams = string.Join(",", newMethod.Parameters
